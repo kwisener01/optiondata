@@ -16,7 +16,7 @@ ALPACA_URL = "https://data.alpaca.markets/v2/stocks/SPY/bars"
 TRADIER_URL_EXPIRATIONS = "https://api.tradier.com/v1/markets/options/expirations"
 TRADIER_URL_OPTIONS = "https://api.tradier.com/v1/markets/options/chains"
 
-# 🔹 Define Date Range
+# 🔹 Define Date Range for SPY Data
 start_date = datetime.datetime(2025, 3, 1)  # Adjust this
 end_date = datetime.datetime(2025, 3, 15)  # Adjust this
 
@@ -111,15 +111,16 @@ filtered_options = options_df[
 pareto_df = filtered_options.groupby("strike")["open_interest"].sum().reset_index()
 pareto_df = pareto_df.sort_values("open_interest", ascending=False).head(5)
 significant_strikes = pareto_df["strike"].tolist()  # Extract top 5 strike levels
+strike_labels = [f"Strike {s}: {oi}" for s, oi in zip(pareto_df["strike"], pareto_df["open_interest"])]
 
 # **Step 8: Plot Historical SPY Price with Option Strike Levels**
 st.subheader("📉 SPY Price Chart with Significant Option Strikes")
 fig, ax = plt.subplots(figsize=(12, 6))
 ax.plot(spy_df.index, spy_df["c"], label="SPY 5-Min Close Price", color="black", linewidth=1)
 
-# Overlay Option Strikes as Horizontal Lines
-for i, strike in enumerate(significant_strikes):
-    ax.axhline(y=strike, linestyle="--", color="red", alpha=0.7, label=f"Strike {strike}" if i == 0 else "")
+# Overlay Option Strikes as Horizontal Lines & Add to Legend
+for i, (strike, label) in enumerate(zip(significant_strikes, strike_labels)):
+    ax.axhline(y=strike, linestyle="--", color="red", alpha=0.7, label=label)
 
 ax.set_title(f"SPY Price Over Last Two Weeks with Significant Option Strikes ({selected_expiration})")
 ax.set_ylabel("Price")
