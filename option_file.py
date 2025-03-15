@@ -146,35 +146,3 @@ filtered_options = options_df[
      (options_df["volume"] > options_df["volume"].quantile(0.80)))
 ]
 
-# Pareto Chart Data
-pareto_df = filtered_options.groupby("strike")["open_interest"].sum().reset_index()
-pareto_df = pareto_df.sort_values("open_interest", ascending=False).head(5)
-significant_strikes = pareto_df["strike"].tolist()
-
-# Plot SPY Price Chart with Significant Option Strikes
-fig, ax = plt.subplots(figsize=(12, 6))
-ax.plot(spy_df["t"], spy_df["c"], label="SPY 5-Min Close Price", color="black", linewidth=1)
-
-# Add Strike Levels
-for strike in significant_strikes:
-    ax.axhline(y=strike, linestyle="--", color="red", alpha=0.7, label=f"Strike {strike}")
-
-ax.set_title("SPY Price Over Last Two Weeks with Significant Option Strikes")
-ax.set_ylabel("Price")
-ax.set_xlabel("Date & Time (ET)")
-ax.tick_params(axis='x', rotation=45)
-ax.legend()
-ax.grid(True)
-
-# Display in Streamlit
-st.pyplot(fig)
-
-# Auto Refresh Logic
-if auto_refresh:
-    current_time = datetime.datetime.now(eastern)
-    market_open = current_time.replace(hour=9, minute=30, second=0, microsecond=0)
-    market_close = current_time.replace(hour=16, minute=0, second=0, microsecond=0)
-
-    if market_open <= current_time <= market_close:
-        time.sleep(300)  # Refresh every 5 minutes
-        st.experimental_rerun()
