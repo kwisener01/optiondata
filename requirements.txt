@@ -3,3 +3,9 @@ requests==2.31.0
 pandas==2.1.4
 matplotlib==3.8.3
 pytz==2024.1
+streamlit
+requests
+pandas
+matplotlib
+yfinance
+pytz
