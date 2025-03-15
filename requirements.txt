@@ -1,0 +1,26 @@
+# Streamlit for web app
+streamlit>=1.10.0
+
+# Data manipulation and fetching
+pandas>=1.3.0
+numpy>=1.21.0
+requests>=2.26.0
+
+# Visualization
+plotly>=5.3.0
+
+# Machine Learning and Reinforcement Learning
+gym>=0.21.0
+stable-baselines3>=1.6.0
+torch>=1.10.0
+tensorflow>=2.6.0
+
+# Alpha Vantage API (for stock data)
+alpha_vantage>=2.3.1
+
+# Additional Libraries
+matplotlib>=3.4.3
+scipy>=1.7.1
+
+# Compatibility fixes for specific platforms
+protobuf<=3.20.1
