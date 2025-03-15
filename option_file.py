@@ -4,15 +4,13 @@ import pandas as pd
 import datetime
 import time
 import matplotlib.pyplot as plt
+import yfinance as yf
 import pytz  # Timezone conversion
 
 # 🔹 Load API Keys from Streamlit Secrets
-ALPACA_API_KEY = st.secrets["ALPACA"]["API_KEY"]
-ALPACA_SECRET_KEY = st.secrets["ALPACA"]["SECRET_KEY"]
 TRADIER_API_KEY = st.secrets["TRADIER"]["API_KEY"]
 
-# 🔹 API Endpoints
-ALPACA_URL = "https://data.alpaca.markets/v2/stocks/SPY/bars"
+# 🔹 Tradier API Endpoint for Options
 TRADIER_URL_OPTIONS = "https://api.tradier.com/v1/markets/options/chains"
 
 # Streamlit App Title
@@ -29,27 +27,16 @@ with col2:
 # Timezone
 eastern = pytz.timezone("US/Eastern")
 
-# 🔹 Function to Fetch SPY Data from Alpaca
+# 🔹 Fetch SPY Data from Yahoo Finance
 @st.cache_data
 def fetch_spy_data():
-    start_date = (datetime.datetime.now() - datetime.timedelta(days=14)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    end_date = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
+    spy_ticker = yf.Ticker("SPY")
+    spy_df = spy_ticker.history(period="14d", interval="5m")  # Last 2 weeks, 5-min intervals
+    spy_df = spy_df.reset_index()
+    spy_df["Datetime"] = spy_df["Datetime"].dt.tz_localize("UTC").dt.tz_convert("US/Eastern")
+    return spy_df
 
-    params = {"timeframe": "5Min", "start": start_date, "end": end_date, "limit": 10000}
-    headers = {"APCA-API-KEY-ID": ALPACA_API_KEY, "APCA-API-SECRET-KEY": ALPACA_SECRET_KEY}
-
-    response = requests.get(ALPACA_URL, headers=headers, params=params)
-
-    if response.status_code == 200:
-        data = response.json().get("bars", [])
-        df = pd.DataFrame(data) if data else pd.DataFrame()
-        df["t"] = pd.to_datetime(df["t"]).dt.tz_localize("UTC").dt.tz_convert("US/Eastern")
-        return df
-    else:
-        st.error(f"Error fetching SPY data: {response.text}")
-        return pd.DataFrame()
-
-# 🔹 Function to Fetch Options Data from Tradier
+# 🔹 Fetch Options Data from Tradier
 @st.cache_data
 def fetch_options_data(expiration_type):
     """Fetch options based on user selection (weekly or monthly)."""
@@ -93,7 +80,7 @@ if spy_df.empty or not options_dfs:
     st.stop()
 
 # 🔹 Latest SPY Price
-latest_spy_price = spy_df["c"].iloc[-1]
+latest_spy_price = spy_df["Close"].iloc[-1]
 
 # 🔹 Combine Options Data
 options_df = pd.concat(options_dfs) if options_dfs else pd.DataFrame()
@@ -112,7 +99,7 @@ significant_strikes = pareto_df["strike"].tolist()
 
 # 🔹 Plot SPY Price Chart with Significant Option Strikes
 fig, ax = plt.subplots(figsize=(12, 6))
-ax.plot(spy_df["t"], spy_df["c"], label="SPY 5-Min Close Price", color="black", linewidth=1)
+ax.plot(spy_df["Datetime"], spy_df["Close"], label="SPY 5-Min Close Price", color="black", linewidth=1)
 
 # 🔹 Add Strike Levels
 for strike in significant_strikes:
