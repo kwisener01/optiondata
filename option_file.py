@@ -136,13 +136,4 @@ if spy_df.empty or options_df.empty:
     st.error("No data retrieved. Please try again later.")
     st.stop()
 
-# Latest SPY Price
-latest_spy_price = spy_df["c"].iloc[-1]
-
-# Filter Significant Options Strikes
-filtered_options = options_df[
-    ((options_df["strike"] >= latest_spy_price * 0.95) & (options_df["strike"] <= latest_spy_price * 1.05)) &
-    ((options_df["open_interest"] > options_df["open_interest"].quantile(0.80)) |
-     (options_df["volume"] > options_df["volume"].quantile(0.80)))
-]
 
