@@ -19,25 +19,18 @@ TRADIER_URL_OPTIONS = "https://api.tradier.com/v1/markets/options/chains"
 st.title("📈 SPY Price & Significant Option Strikes")
 
 # User Options: Weekly or Monthly Options
-col1, col2, col3 = st.columns(3)
+col1, col2 = st.columns(2)
 
 with col1:
     weekly_selected = st.checkbox("Weekly Options", value=True)
 with col2:
     monthly_selected = st.checkbox("Monthly Options", value=False)
-with col3:
-    auto_refresh = st.checkbox("Auto Refresh Every 5 Minutes (Market Hours Only)")
-
-# Button to refresh
-if st.button("Refresh Data"):
-    st.cache_data.clear()
-    st.experimental_rerun()
 
 # Timezone
 eastern = pytz.timezone("US/Eastern")
 
 # 🔹 Function to Fetch SPY Data from Alpaca
-@st.cache_data(ttl=300)  # Cache for 5 minutes
+@st.cache_data
 def fetch_spy_data():
     start_date = (datetime.datetime.now() - datetime.timedelta(days=14)).strftime("%Y-%m-%dT%H:%M:%SZ")
     end_date = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -57,7 +50,7 @@ def fetch_spy_data():
         return pd.DataFrame()
 
 # 🔹 Function to Fetch Options Data from Tradier
-@st.cache_data(ttl=300)  # Cache for 5 minutes
+@st.cache_data
 def fetch_options_data(expiration_type):
     """Fetch options based on user selection (weekly or monthly)."""
     if expiration_type == "Weekly":
@@ -138,12 +131,3 @@ st.pyplot(fig)
 # 🔹 Show Top 5 Significant Strikes in a Table
 st.subheader("📊 Top 5 Significant Option Strikes")
 st.dataframe(pareto_df)
-
-# 🔹 Auto Refresh Logic (Only During Market Hours)
-if auto_refresh:
-    current_time = datetime.datetime.now(eastern)
-    market_open = current_time.replace(hour=9, minute=30, second=0, microsecond=0)
-    market_close = current_time.replace(hour=16, minute=0, second=0, microsecond=0)
-
-    if market_open <= current_time <= market_close:
-        st.experimental_rerun()
