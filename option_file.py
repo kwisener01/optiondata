@@ -50,7 +50,7 @@ spy_df = fetch_spy_data(start_date, end_date)
 
 # Convert and Process SPY Data
 if not spy_df.empty:
-    spy_df["t"] = pd.to_datetime(spy_df["t"]).dt.tz_localize("UTC").dt.tz_convert("US/Eastern")  # Convert to ET
+    spy_df["t"] = pd.to_datetime(spy_df["t"]).dt.tz_convert("US/Eastern")  # Convert to Eastern Time
     spy_df.set_index("t", inplace=True)
     latest_spy_price = spy_df["c"].iloc[-1]  # Last close price
     st.success("✅ SPY Data Retrieved Successfully!")
