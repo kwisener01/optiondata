@@ -110,30 +110,3 @@ st.pyplot(fig)
 # Streamlit Table: Show Top 5 Strikes
 st.subheader("📊 Top 5 Significant Option Strikes")
 st.dataframe(pareto_df)
-
-
-# UI Layout
-st.title("SPY Price & Significant Options Strikes")
-st.write("This app fetches SPY price data from Alpaca and options data from Tradier.")
-
-# Buttons
-col1, col2 = st.columns(2)
-
-with col1:
-    if st.button("Refresh Data"):
-        st.cache_data.clear()
-        st.experimental_rerun()
-
-with col2:
-    auto_refresh = st.checkbox("Auto Refresh Every 5 Minutes (Market Hours Only)")
-
-# Fetch Data
-spy_df = fetch_spy_data()
-options_df = fetch_options_data()
-
-# Validate Data
-if spy_df.empty or options_df.empty:
-    st.error("No data retrieved. Please try again later.")
-    st.stop()
-
-
