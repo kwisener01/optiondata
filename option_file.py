@@ -108,47 +108,50 @@ if not options_df.empty:
 else:
     st.error("❌ No options data found for the selected expirations.")
 
-# 🔹 Put/Call Ratio Calculation
-put_call_ratio_df = options_df.groupby("expiration").apply(
-    lambda x: (x[x["option_type"] == "put"]["volume"].sum() / x[x["option_type"] == "call"]["volume"].sum()) if x[x["option_type"] == "call"]["volume"].sum() > 0 else 0
-).reset_index()
-put_call_ratio_df.columns = ["Expiration", "Put/Call Ratio"]
-put_call_ratio_df = put_call_ratio_df.sort_values("Expiration")
+# 🔹 **Top 5 Significant Option Strikes**
+significant_options = options_df.groupby("strike")["open_interest"].sum().reset_index()
+significant_options = significant_options.sort_values("open_interest", ascending=False).head(5)
+top_strikes = significant_options["strike"].tolist()
 
-# 📈 Put/Call Ratio Line Chart
-st.subheader("📉 Put/Call Ratio Over Time (Next Month Expiration)")
-fig, ax = plt.subplots(figsize=(12, 6))
-ax.plot(put_call_ratio_df["Expiration"], put_call_ratio_df["Put/Call Ratio"], marker='o', linestyle='-', color='purple', label="Put/Call Ratio")
-ax.axhline(y=1.5, color='red', linestyle='--', alpha=0.5, label="Bearish Threshold (1.5)")
-ax.axhline(y=0.7, color='green', linestyle='--', alpha=0.5, label="Bullish Threshold (0.7)")
-ax.axhline(y=2.5, color='darkred', linestyle='--', alpha=0.5, label="Extreme Bearish (2.5)")
-ax.set_title("Put/Call Ratio for Selected Expiration")
-ax.set_ylabel("Put/Call Ratio")
-ax.set_xlabel("Expiration Date")
-ax.grid(True)
-ax.legend()
-st.pyplot(fig)
-
-# 📊 Put/Call Ratio Interpretation Table
-st.subheader("📊 Put/Call Ratio Sentiment Guide")
-pc_table = pd.DataFrame({
-    "Put/Call Ratio": ["> 2.5", "> 1.5", "0.7 - 1.5", "< 0.7"],
-    "Market Sentiment": [
-        "📉 Extreme Bearish (Potential for Reversal)",
-        "⚠️ Bearish Sentiment (Downside Risk)",
-        "🟡 Neutral / Mixed Sentiment",
-        "🟢 Bullish Sentiment (Upside Potential)"
-    ]
-})
-st.table(pc_table)
-
-# 📉 SPY Price Chart with Significant Option Strikes
+# 📉 **SPY Price Chart with Significant Option Strikes**
 st.subheader("📉 SPY Price Chart with Significant Option Strikes")
 fig, ax = plt.subplots(figsize=(12, 6))
 ax.plot(spy_df.index, spy_df["c"], label="SPY 5-Min Close Price", color="black", linewidth=1)
-ax.set_title("SPY Price Over Selected Period")
+
+# Overlay Option Strikes as Horizontal Lines
+for strike in top_strikes:
+    ax.axhline(y=strike, linestyle="--", color="red", alpha=0.7, label=f"Strike {strike}")
+
+ax.set_title("SPY Price Over Selected Period with Significant Option Strikes")
 ax.set_ylabel("Price")
 ax.set_xlabel("Date & Time (ET)")
 ax.tick_params(axis='x', rotation=45)
 ax.grid(True)
+ax.legend()
 st.pyplot(fig)
+
+# 📊 **Pareto Chart**
+st.subheader("📊 Pareto Chart: Top 5 Option Strikes by Open Interest")
+fig, ax = plt.subplots(figsize=(10, 5))
+ax.bar(significant_options["strike"].astype(str), significant_options["open_interest"], color="blue", alpha=0.7)
+ax.set_title("Top 5 Option Strikes by Open Interest")
+ax.set_xlabel("Strike Price")
+ax.set_ylabel("Open Interest")
+ax.grid(axis="y")
+st.pyplot(fig)
+
+# 🧠 **AI Trade Plan**
+if st.button("🧠 Generate AI Trade Plan"):
+    with st.spinner("Generating trade plan..."):
+        try:
+            response = openai_client.chat.completions.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": "You are a professional trading strategist."},
+                    {"role": "user", "content": f"Given SPY price {latest_spy_price}, VIX trend, put/call ratio, and option strikes {top_strikes}, generate a simple trading plan."}
+                ]
+            )
+            st.subheader("📋 AI-Generated Trade Plan")
+            st.write(response.choices[0].message.content)
+        except Exception as e:
+            st.error(f"⚠️ Error generating trade plan: {str(e)}")
