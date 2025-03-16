@@ -28,80 +28,36 @@ end_date = st.sidebar.date_input("End Date", datetime.date(2025, 3, 15))
 # Streamlit App Title
 st.title("📈 SPY Price, Options, & Market Sentiment")
 
-# Function to Fetch Available Expiration Dates
-@st.cache_data
-def fetch_expiration_dates():
-    headers = {"Authorization": f"Bearer {TRADIER_API_KEY}", "Accept": "application/json"}
-    response = requests.get(f"{TRADIER_URL_EXPIRATIONS}?symbol=SPY", headers=headers)
-
-    if response.status_code == 200:
-        data = response.json()
-        return data.get("expirations", {}).get("date", [])
-    else:
-        st.error("⚠️ Error fetching expiration dates!")
-        return []
-
-# Fetch Expiration Dates
-expiration_dates = fetch_expiration_dates()
-
-# Expiration Date Multi-Select Dropdown
-selected_expirations = st.sidebar.multiselect("📆 Select Expiration Dates", expiration_dates, default=[expiration_dates[0]])
-
-# Function to Fetch SPY Data from Alpaca
-@st.cache_data
-def fetch_spy_data(start, end):
-    params = {
-        "timeframe": "5Min",
-        "start": f"{start}T00:00:00Z",
-        "end": f"{end}T23:59:59Z",
-        "limit": 10000
-    }
-    headers = {
-        "APCA-API-KEY-ID": ALPACA_API_KEY,
-        "APCA-API-SECRET-KEY": ALPACA_SECRET_KEY
-    }
-    
-    response = requests.get(ALPACA_URL, headers=headers, params=params)
-
-    if response.status_code == 200:
-        data = response.json().get("bars", [])
-        return pd.DataFrame(data) if data else pd.DataFrame()
-    else:
-        st.error(f"❌ Error fetching SPY data: {response.text}")
-        return pd.DataFrame()
-
-# Fetch SPY Data
-spy_df = fetch_spy_data(start_date, end_date)
-
-# Convert and Process SPY Data
-if not spy_df.empty:
-    spy_df["t"] = pd.to_datetime(spy_df["t"]).dt.tz_convert("US/Eastern")
-    spy_df.set_index("t", inplace=True)
-    latest_spy_price = spy_df["c"].iloc[-1]
-    st.success("✅ SPY Data Retrieved Successfully!")
-else:
-    st.error("❌ No SPY data retrieved from Alpaca!")
-
-# Function to Fetch VIX & Put/Call Ratio from Yahoo Finance
+# Function to Fetch Market Sentiment (VIX & Put/Call Ratio)
 @st.cache_data
 def fetch_market_sentiment():
-    vix = yf.download("^VIX", period="7d", interval="1d")["Close"]
-    put_call = yf.download("^PCCE", period="7d", interval="1d")["Close"]  # CBOE Equity Put/Call Ratio
-    
-    sentiment_df = pd.DataFrame({
-        "Date": vix.index,
-        "VIX": vix.values,
-        "Put/Call Ratio": put_call.values
-    }).dropna()
-    
-    # Compute Sentiment Score (Lower VIX & Put/Call → More Bullish)
-    sentiment_df["Sentiment Score"] = 100 - ((sentiment_df["VIX"] * 2) + (sentiment_df["Put/Call Ratio"] * 100))
-    return sentiment_df
+    try:
+        vix = yf.download("^VIX", period="7d", interval="1d")["Close"]
+        put_call = yf.download("^PCCE", period="7d", interval="1d")["Close"]  # CBOE Equity Put/Call Ratio
+
+        if vix.empty or put_call.empty:
+            st.warning("⚠️ VIX or Put/Call Ratio data unavailable. Sentiment calculation skipped.")
+            return pd.DataFrame()
+
+        # Create Sentiment DataFrame
+        sentiment_df = pd.DataFrame({
+            "Date": vix.index,
+            "VIX": vix.values,
+            "Put/Call Ratio": put_call.values
+        }).dropna()
+
+        # Compute Sentiment Score
+        sentiment_df["Sentiment Score"] = 100 - ((sentiment_df["VIX"] * 2) + (sentiment_df["Put/Call Ratio"] * 100))
+        return sentiment_df
+
+    except Exception as e:
+        st.error(f"⚠️ Error fetching market sentiment: {e}")
+        return pd.DataFrame()
 
 # Fetch Market Sentiment Data
 sentiment_df = fetch_market_sentiment()
 
-# Determine Latest Sentiment Score
+# Display Market Sentiment Only if Data is Available
 if not sentiment_df.empty:
     latest_sentiment = sentiment_df["Sentiment Score"].iloc[-1]
     
@@ -133,7 +89,7 @@ if st.button("🧠 Generate AI Trade Plan"):
                 model="gpt-4",
                 messages=[
                     {"role": "system", "content": "You are a professional trading strategist."},
-                    {"role": "user", "content": f"Given SPY price {latest_spy_price}, significant option strikes {selected_expirations}, and market sentiment {sentiment_label} (score: {latest_sentiment:.1f}), generate a simple trading plan that is easy to follow."}
+                    {"role": "user", "content": f"Given SPY price, significant option strikes, and market sentiment {sentiment_label} (score: {latest_sentiment:.1f}), generate a simple trading plan that is easy to follow."}
                 ]
             )
             trade_plan = response.choices[0].message.content
