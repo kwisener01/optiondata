@@ -177,9 +177,9 @@ def fetch_options_data(expiration_dates):
 # Fetch Options Data
 options_df = fetch_options_data(selected_expirations)
 
-if not options_df.empty:
+#if not options_df.empty:
  #   st.success(f"✅ Retrieved {len(options_df)} SPY option contracts!")
-else:
+#else:
 #    st.error("❌ No options data found for the selected expirations.")
 
 # Filter Option Strikes Near SPY Price (±5%)
