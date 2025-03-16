@@ -2,9 +2,11 @@ import streamlit as st
 import requests
 import pandas as pd
 import datetime
+import time
 import matplotlib.pyplot as plt
-import openai  # OpenAI API for trade plan generation
 import pytz  # Timezone conversion
+yimport yfinance as yf
+import openai
 
 # 🔹 Load API Keys from Streamlit Secrets
 ALPACA_API_KEY = st.secrets["ALPACA"]["API_KEY"]
@@ -12,56 +14,37 @@ ALPACA_SECRET_KEY = st.secrets["ALPACA"]["SECRET_KEY"]
 TRADIER_API_KEY = st.secrets["TRADIER"]["API_KEY"]
 OPENAI_API_KEY = st.secrets["OPENAI"]["API_KEY"]
 
-openai_client = openai.OpenAI(api_key=OPENAI_API_KEY)  # Initialize OpenAI client
+# Set OpenAI API Key
+openai.api_key = OPENAI_API_KEY
 
 # 🔹 API Endpoints
 ALPACA_URL = "https://data.alpaca.markets/v2/stocks/SPY/bars"
-TRADIER_URL_EXPIRATIONS = "https://api.tradier.com/v1/markets/options/expirations"
 TRADIER_URL_OPTIONS = "https://api.tradier.com/v1/markets/options/chains"
 
-# 🔹 User Input for Date Range
-st.sidebar.subheader("📅 Select Date Range")
-start_date = st.sidebar.date_input("Start Date", datetime.date(2025, 3, 1))
-end_date = st.sidebar.date_input("End Date", datetime.date(2025, 3, 15))
-
 # Streamlit App Title
-st.title("📈 SPY Price & Significant Option Strikes")
+st.title("📈 SPY Market Sentiment & Trade Plan")
 
-# Function to Fetch Available Expiration Dates
-@st.cache_data
-def fetch_expiration_dates():
-    headers = {"Authorization": f"Bearer {TRADIER_API_KEY}", "Accept": "application/json"}
-    response = requests.get(f"{TRADIER_URL_EXPIRATIONS}?symbol=SPY", headers=headers)
+# User selects start & end dates for SPY data
+start_date = st.date_input("Select Start Date", datetime.date(2025, 3, 1))
+end_date = st.date_input("Select End Date", datetime.date(2025, 3, 15))
 
-    if response.status_code == 200:
-        data = response.json()
-        return data.get("expirations", {}).get("date", [])
-    else:
-        st.error("⚠️ Error fetching expiration dates!")
-        return []
+# User selects expiration dates (multi-select dropdown)
+selected_expirations = st.multiselect("Select Option Expiration Dates", ["2025-03-21", "2025-03-28", "2025-04-05"])
 
-# Fetch Expiration Dates
-expiration_dates = fetch_expiration_dates()
-
-# Expiration Date Multi-Select Dropdown
-selected_expirations = st.sidebar.multiselect("📆 Select Expiration Dates", expiration_dates, default=[expiration_dates[0]])
-
-# Function to Fetch SPY Data from Alpaca
+# Fetch SPY Data from Alpaca
 @st.cache_data
 def fetch_spy_data(start, end):
     params = {
         "timeframe": "5Min",
-        "start": f"{start}T00:00:00Z",
-        "end": f"{end}T23:59:59Z",
+        "start": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "end": end.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "limit": 10000
     }
     headers = {
         "APCA-API-KEY-ID": ALPACA_API_KEY,
         "APCA-API-SECRET-KEY": ALPACA_SECRET_KEY
     }
-    
     response = requests.get(ALPACA_URL, headers=headers, params=params)
-
     if response.status_code == 200:
         data = response.json().get("bars", [])
         return pd.DataFrame(data) if data else pd.DataFrame()
@@ -69,93 +52,67 @@ def fetch_spy_data(start, end):
         st.error(f"❌ Error fetching SPY data: {response.text}")
         return pd.DataFrame()
 
-# Fetch SPY Data
 spy_df = fetch_spy_data(start_date, end_date)
-
-# Convert and Process SPY Data
 if not spy_df.empty:
     spy_df["t"] = pd.to_datetime(spy_df["t"]).dt.tz_convert("US/Eastern")
     spy_df.set_index("t", inplace=True)
     latest_spy_price = spy_df["c"].iloc[-1]
     st.success("✅ SPY Data Retrieved Successfully!")
 else:
-    st.error("❌ No SPY data retrieved from Alpaca!")
+    st.error("❌ No SPY data retrieved!")
 
-# Function to Fetch Options Data from Tradier
+# Fetch Options Data
 @st.cache_data
-def fetch_options_data(expiration_dates):
+def fetch_options_data(expirations):
     all_options = []
-    for exp_date in expiration_dates:
+    for exp_date in expirations:
         options_params = {"symbol": "SPY", "expiration": exp_date}
         headers = {"Authorization": f"Bearer {TRADIER_API_KEY}", "Accept": "application/json"}
-
         response = requests.get(TRADIER_URL_OPTIONS, headers=headers, params=options_params)
-
         if response.status_code == 200:
             options_data = response.json()
             if "options" in options_data and "option" in options_data["options"]:
-                df = pd.DataFrame(options_data["options"]["option"])
-                df["expiration"] = exp_date  # Add expiration date as a column
-                all_options.append(df)
-
+                all_options.append(pd.DataFrame(options_data["options"]["option"]))
     return pd.concat(all_options) if all_options else pd.DataFrame()
 
-# Fetch Options Data
 options_df = fetch_options_data(selected_expirations)
 
-if not options_df.empty:
-    st.success(f"✅ Retrieved {len(options_df)} SPY option contracts!")
-else:
-    st.error("❌ No options data found for the selected expirations.")
+# Fetch VIX & Put/Call Ratio
+vix_data = yf.download("^VIX", start=start_date, end=end_date, interval="1d")
+pcr_data = yf.download("^PCRATIO", start=start_date, end=end_date, interval="1d")
 
-# Filter Option Strikes Near SPY Price (±5%)
-filtered_options = options_df[
-    ((options_df["strike"] >= latest_spy_price * 0.95) & (options_df["strike"] <= latest_spy_price * 1.05)) &
-    ((options_df["open_interest"] > options_df["open_interest"].quantile(0.80)) |
-     (options_df["volume"] > options_df["volume"].quantile(0.80)))
-]
+# Compute Sentiment Score
+sentiment_scores = []
+for date in vix_data.index:
+    vix = vix_data.loc[date, "Close"]
+    pcr = pcr_data.loc[date, "Close"] if date in pcr_data.index else 0.85  # Default neutral PCR
+    vix_score = max(0, 100 - (vix - 18) * 5)
+    pcr_score = max(0, 100 - (pcr - 0.7) * 100)
+    sentiment_scores.append((date, (vix_score + pcr_score) / 2))
 
-# Generate Pareto Chart for Significant Strikes
-pareto_df = filtered_options.groupby(["expiration", "strike"])["open_interest"].sum().reset_index()
-pareto_df = pareto_df.sort_values("open_interest", ascending=False).head(5)
-significant_strikes = pareto_df["strike"].tolist()
+sentiment_df = pd.DataFrame(sentiment_scores, columns=["Date", "Sentiment Score"])
 
-# Streamlit Plot: Historical SPY Price with Option Strike Levels
-st.subheader("📉 SPY Price Chart with Significant Option Strikes")
-fig, ax = plt.subplots(figsize=(12, 6))
-ax.plot(spy_df.index, spy_df["c"], label="SPY 5-Min Close Price", color="black", linewidth=1)
-
-# Overlay Option Strikes as Horizontal Lines
-for i, strike in enumerate(significant_strikes):
-    ax.axhline(y=strike, linestyle="--", color="red", alpha=0.7, label=f"Strike {strike}")
-
-ax.set_title("SPY Price Over Selected Period with Significant Option Strikes")
-ax.set_ylabel("Price")
-ax.set_xlabel("Date & Time (ET)")
-ax.tick_params(axis='x', rotation=45)
-ax.grid(True)
+# Plot Sentiment Score
+st.subheader("📉 7-Day Market Sentiment Trend")
+fig, ax = plt.subplots(figsize=(10, 5))
+ax.plot(sentiment_df["Date"], sentiment_df["Sentiment Score"], marker="o", linestyle="-", color="blue")
+ax.axhline(y=60, color="green", linestyle="--", label="Bullish")
+ax.axhline(y=40, color="yellow", linestyle="--", label="Neutral")
+ax.axhline(y=20, color="red", linestyle="--", label="Bearish")
+ax.set_ylabel("Sentiment Score (0-100)")
+ax.set_title("Market Sentiment Over Last 7 Days")
 ax.legend()
 st.pyplot(fig)
 
-# Streamlit Table: Show Top 5 Strikes
-st.subheader("📊 Top 5 Significant Option Strikes")
-st.dataframe(pareto_df)
-
-# Trade Plan Generation Button
-if st.button("🧠 Generate Trade Plan"):
-    with st.spinner("Generating trade plan..."):
-        try:
-            # OpenAI GPT Call (New API format)
-            response = openai_client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {"role": "system", "content": "You are a professional trading strategist."},
-                    {"role": "user", "content": f"Given the SPY price data and significant option strikes for the following expiration dates: {selected_expirations}, generate a simple trading plan that is easy to follow."}
-                ]
-            )
-            trade_plan = response.choices[0].message.content
-            st.success("✅ Trade Plan Generated!")
-            st.subheader("📋 AI-Generated Trade Plan")
-            st.write(trade_plan)
-        except Exception as e:
-            st.error(f"⚠️ Error generating trade plan: {str(e)}")
+# Generate AI Trade Plan
+if st.button("Generate AI Trade Plan"):
+    prompt = f"SPY price is {latest_spy_price}, market sentiment is {sentiment_df.iloc[-1]['Sentiment Score']}.
+    Based on significant options and sentiment, generate an easy-to-follow trade plan."
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[{"role": "system", "content": "You are an expert trading assistant."},
+                  {"role": "user", "content": prompt}]
+    )
+    trade_plan = response["choices"][0]["message"]["content"]
+    st.subheader("📋 AI-Generated Trade Plan")
+    st.write(trade_plan)
