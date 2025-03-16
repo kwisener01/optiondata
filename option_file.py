@@ -4,7 +4,6 @@ import pandas as pd
 import datetime
 import matplotlib.pyplot as plt
 import openai  # OpenAI API for trade plan generation
-import yfinance as yf  # Fetch VIX & Put/Call Ratio
 import pytz  # Timezone conversion
 
 # 🔹 Load API Keys from Streamlit Secrets
@@ -26,70 +25,142 @@ start_date = st.sidebar.date_input("Start Date", datetime.date(2025, 3, 1))
 end_date = st.sidebar.date_input("End Date", datetime.date(2025, 3, 15))
 
 # Streamlit App Title
-st.title("📈 SPY Price, Options, & Market Sentiment")
+st.title("📈 SPY Price & Significant Option Strikes")
 
-# Function to Fetch Market Sentiment (VIX & Put/Call Ratio)
+# Function to Fetch Available Expiration Dates
 @st.cache_data
-def fetch_market_sentiment():
-    try:
-        vix = yf.download("^VIX", period="7d", interval="1d")["Close"]
-        put_call = yf.download("^PCCE", period="7d", interval="1d")["Close"]  # CBOE Equity Put/Call Ratio
+def fetch_expiration_dates():
+    headers = {"Authorization": f"Bearer {TRADIER_API_KEY}", "Accept": "application/json"}
+    response = requests.get(f"{TRADIER_URL_EXPIRATIONS}?symbol=SPY", headers=headers)
 
-        if vix.empty or put_call.empty:
-            st.warning("⚠️ VIX or Put/Call Ratio data unavailable. Sentiment calculation skipped.")
-            return pd.DataFrame()
+    if response.status_code == 200:
+        data = response.json()
+        return data.get("expirations", {}).get("date", [])
+    else:
+        st.error("⚠️ Error fetching expiration dates!")
+        return []
 
-        # Create Sentiment DataFrame
-        sentiment_df = pd.DataFrame({
-            "Date": vix.index,
-            "VIX": vix.values,
-            "Put/Call Ratio": put_call.values
-        }).dropna()
+# Fetch Expiration Dates
+expiration_dates = fetch_expiration_dates()
 
-        # Compute Sentiment Score
-        sentiment_df["Sentiment Score"] = 100 - ((sentiment_df["VIX"] * 2) + (sentiment_df["Put/Call Ratio"] * 100))
-        return sentiment_df
+# Expiration Date Multi-Select Dropdown
+selected_expirations = st.sidebar.multiselect("📆 Select Expiration Dates", expiration_dates, default=[expiration_dates[0]])
 
-    except Exception as e:
-        st.error(f"⚠️ Error fetching market sentiment: {e}")
+# Function to Fetch SPY Data from Alpaca
+@st.cache_data
+def fetch_spy_data(start, end):
+    params = {
+        "timeframe": "5Min",
+        "start": f"{start}T00:00:00Z",
+        "end": f"{end}T23:59:59Z",
+        "limit": 10000
+    }
+    headers = {
+        "APCA-API-KEY-ID": ALPACA_API_KEY,
+        "APCA-API-SECRET-KEY": ALPACA_SECRET_KEY
+    }
+    
+    response = requests.get(ALPACA_URL, headers=headers, params=params)
+
+    if response.status_code == 200:
+        data = response.json().get("bars", [])
+        return pd.DataFrame(data) if data else pd.DataFrame()
+    else:
+        st.error(f"❌ Error fetching SPY data: {response.text}")
         return pd.DataFrame()
 
-# Fetch Market Sentiment Data
-sentiment_df = fetch_market_sentiment()
+# Fetch SPY Data
+spy_df = fetch_spy_data(start_date, end_date)
 
-# Display Market Sentiment Only if Data is Available
-if not sentiment_df.empty:
-    latest_sentiment = sentiment_df["Sentiment Score"].iloc[-1]
-    
-    # Color Code Sentiment
-    if latest_sentiment > 60:
-        sentiment_label = "🟢 Bullish"
-    elif latest_sentiment > 40:
-        sentiment_label = "🟡 Neutral"
-    else:
-        sentiment_label = "🔴 Bearish"
+# Convert and Process SPY Data
+if not spy_df.empty:
+    spy_df["t"] = pd.to_datetime(spy_df["t"]).dt.tz_convert("US/Eastern")
+    spy_df.set_index("t", inplace=True)
+    latest_spy_price = spy_df["c"].iloc[-1]
+    st.success("✅ SPY Data Retrieved Successfully!")
+else:
+    st.error("❌ No SPY data retrieved from Alpaca!")
 
-    st.subheader("📊 Market Sentiment Score")
-    st.metric(label="Market Sentiment", value=f"{latest_sentiment:.1f}", delta=sentiment_label)
+# Function to Fetch Options Data from Tradier
+@st.cache_data
+def fetch_options_data(expiration_dates):
+    all_options = []
+    for exp_date in expiration_dates:
+        options_params = {"symbol": "SPY", "expiration": exp_date}
+        headers = {"Authorization": f"Bearer {TRADIER_API_KEY}", "Accept": "application/json"}
 
-    # Plot Sentiment Over Time
-    st.subheader("📈 7-Day Market Sentiment Trend")
-    fig, ax = plt.subplots(figsize=(10, 4))
-    ax.plot(sentiment_df["Date"], sentiment_df["Sentiment Score"], marker="o", linestyle="-", color="black")
-    ax.set_title("Market Sentiment (Last 7 Days)")
-    ax.set_ylabel("Sentiment Score")
-    ax.grid(True)
-    st.pyplot(fig)
+        response = requests.get(TRADIER_URL_OPTIONS, headers=headers, params=options_params)
 
-# 🧠 **Trade Plan with Market Sentiment**
-if st.button("🧠 Generate AI Trade Plan"):
+        if response.status_code == 200:
+            options_data = response.json()
+            if "options" in options_data and "option" in options_data["options"]:
+                df = pd.DataFrame(options_data["options"]["option"])
+                df["expiration"] = exp_date  # Add expiration date as a column
+                all_options.append(df)
+
+    return pd.concat(all_options) if all_options else pd.DataFrame()
+
+# Fetch Options Data
+options_df = fetch_options_data(selected_expirations)
+
+if not options_df.empty:
+    st.success(f"✅ Retrieved {len(options_df)} SPY option contracts!")
+else:
+    st.error("❌ No options data found for the selected expirations.")
+
+# Filter Option Strikes Near SPY Price (±5%)
+filtered_options = options_df[
+    ((options_df["strike"] >= latest_spy_price * 0.95) & (options_df["strike"] <= latest_spy_price * 1.05)) & 
+    ((options_df["open_interest"] > options_df["open_interest"].quantile(0.80)) |
+     (options_df["volume"] > options_df["volume"].quantile(0.80)))
+]
+
+# Generate Pareto Chart for Significant Strikes
+pareto_df = filtered_options.groupby(["expiration", "strike"])["open_interest"].sum().reset_index()
+pareto_df = pareto_df.sort_values("open_interest", ascending=False).head(5)
+significant_strikes = pareto_df["strike"].tolist()
+
+# 📊 **SPY Price Chart with Option Strikes**
+st.subheader("📉 SPY Price Chart with Significant Option Strikes")
+fig, ax = plt.subplots(figsize=(12, 6))
+ax.plot(spy_df.index, spy_df["c"], label="SPY 5-Min Close Price", color="black", linewidth=1)
+
+# Overlay Option Strikes as Horizontal Lines
+for i, strike in enumerate(significant_strikes):
+    ax.axhline(y=strike, linestyle="--", color="red", alpha=0.7, label=f"Strike {strike}")
+
+ax.set_title("SPY Price Over Selected Period with Significant Option Strikes")
+ax.set_ylabel("Price")
+ax.set_xlabel("Date & Time (ET)")
+ax.tick_params(axis='x', rotation=45)
+ax.grid(True)
+ax.legend()
+st.pyplot(fig)
+
+# 📊 **Pareto Chart**
+st.subheader("📊 Pareto Chart: Top 5 Option Strikes by Open Interest")
+fig, ax = plt.subplots(figsize=(10, 5))
+ax.bar(pareto_df["strike"].astype(str), pareto_df["open_interest"], color="blue", alpha=0.7)
+ax.set_title("Top 5 Option Strikes by Open Interest")
+ax.set_xlabel("Strike Price")
+ax.set_ylabel("Open Interest")
+ax.grid(axis="y")
+st.pyplot(fig)
+
+# Streamlit Table: Show Top 5 Strikes
+st.subheader("📋 Top 5 Significant Option Strikes")
+st.dataframe(pareto_df)
+
+# 🧠 **Trade Plan Generation Button**
+if st.button("🧠 Generate Trade Plan"):
     with st.spinner("Generating trade plan..."):
         try:
+            # OpenAI GPT Call (New API format)
             response = openai_client.chat.completions.create(
                 model="gpt-4",
                 messages=[
                     {"role": "system", "content": "You are a professional trading strategist."},
-                    {"role": "user", "content": f"Given SPY price, significant option strikes, and market sentiment {sentiment_label} (score: {latest_sentiment:.1f}), generate a simple trading plan that is easy to follow."}
+                    {"role": "user", "content": f"Given the SPY price data and significant option strikes {significant_strikes} for {selected_expirations}, generate a simple trading plan that is easy to follow."}
                 ]
             )
             trade_plan = response.choices[0].message.content
