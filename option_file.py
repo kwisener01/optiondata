@@ -108,8 +108,12 @@ if not options_df.empty:
 else:
     st.error("❌ No options data found for the selected expirations.")
 
-# 🔹 **Top 5 Significant Option Strikes**
-significant_options = options_df.groupby("strike")["open_interest"].sum().reset_index()
+# 🔹 **Top 5 Significant Option Strikes (Near Current SPY Price)**
+significant_options = options_df[
+    (options_df["strike"] >= latest_spy_price * 0.95) & 
+    (options_df["strike"] <= latest_spy_price * 1.05)
+]
+significant_options = significant_options.groupby("strike")["open_interest"].sum().reset_index()
 significant_options = significant_options.sort_values("open_interest", ascending=False).head(5)
 top_strikes = significant_options["strike"].tolist()
 
@@ -130,14 +134,21 @@ ax.grid(True)
 ax.legend()
 st.pyplot(fig)
 
-# 📊 **Pareto Chart**
-st.subheader("📊 Pareto Chart: Top 5 Option Strikes by Open Interest")
-fig, ax = plt.subplots(figsize=(10, 5))
-ax.bar(significant_options["strike"].astype(str), significant_options["open_interest"], color="blue", alpha=0.7)
-ax.set_title("Top 5 Option Strikes by Open Interest")
-ax.set_xlabel("Strike Price")
-ax.set_ylabel("Open Interest")
-ax.grid(axis="y")
+# 📊 **Put/Call Ratio Chart**
+st.subheader("📉 Put/Call Ratio Over Time")
+put_call_df = options_df.groupby("expiration").apply(
+    lambda x: x[x["option_type"] == "put"]["volume"].sum() / x[x["option_type"] == "call"]["volume"].sum()
+).reset_index()
+put_call_df.columns = ["Expiration", "Put/Call Ratio"]
+
+fig, ax = plt.subplots(figsize=(12, 6))
+ax.plot(put_call_df["Expiration"], put_call_df["Put/Call Ratio"], marker='o', linestyle='-', color='purple')
+ax.axhline(y=1.5, color='red', linestyle='--', alpha=0.5, label="Bearish Threshold (1.5)")
+ax.axhline(y=0.7, color='green', linestyle='--', alpha=0.5, label="Bullish Threshold (0.7)")
+ax.set_ylabel("Put/Call Ratio")
+ax.set_xlabel("Expiration Date")
+ax.grid(True)
+ax.legend()
 st.pyplot(fig)
 
 # 🧠 **AI Trade Plan**
@@ -146,10 +157,8 @@ if st.button("🧠 Generate AI Trade Plan"):
         try:
             response = openai_client.chat.completions.create(
                 model="gpt-4",
-                messages=[
-                    {"role": "system", "content": "You are a professional trading strategist."},
-                    {"role": "user", "content": f"Given SPY price {latest_spy_price}, VIX trend, put/call ratio, and option strikes {top_strikes}, generate a simple trading plan."}
-                ]
+                messages=[{"role": "system", "content": "You are a professional trading strategist."},
+                          {"role": "user", "content": f"Given SPY price {latest_spy_price}, VIX trend, put/call ratio, and option strikes {top_strikes}, generate a simple trading plan."}]
             )
             st.subheader("📋 AI-Generated Trade Plan")
             st.write(response.choices[0].message.content)
