@@ -15,6 +15,29 @@ ALPACA_URL = "https://data.alpaca.markets/v2/stocks/SPY/bars"
 TRADIER_URL_EXPIRATIONS = "https://api.tradier.com/v1/markets/options/expirations"
 TRADIER_URL_OPTIONS = "https://api.tradier.com/v1/markets/options/chains"
 
+# 🔹 Sidebar for Dark Mode Toggle
+st.sidebar.title("⚙️ Settings")
+dark_mode = st.sidebar.checkbox("🌙 Enable Dark Mode")
+
+# 🔹 Apply Dark Mode CSS
+def set_dark_mode():
+    dark_css = """
+    <style>
+        body { background-color: #0E1117; color: white; }
+        .stApp { background-color: #0E1117; }
+        .stDataFrame { background-color: #1E2127; color: white; }
+        .st-bd { color: white; }
+        .st-cd { color: white; }
+        .stCheckbox label { color: white !important; }
+        .stButton>button { background-color: #1F2937; color: white; border-radius: 8px; }
+        .stTextInput>div>div>input { background-color: #1F2937; color: white; }
+    </style>
+    """
+    st.markdown(dark_css, unsafe_allow_html=True)
+
+if dark_mode:
+    set_dark_mode()
+    
 # **Streamlit App Title**
 st.title("📈 SPY Price & Significant Option Strikes")
 
