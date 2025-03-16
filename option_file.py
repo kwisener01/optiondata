@@ -43,6 +43,9 @@ def fetch_expiration_dates():
 
 expiration_dates = fetch_expiration_dates()
 
+
+
+###############################################################################
 # 📆 **Expiration Date Multi-Select**
 selected_expirations = st.sidebar.multiselect("📆 Select Expiration Dates", expiration_dates, default=[expiration_dates[0]])
 
@@ -88,6 +91,8 @@ if not vix_df.empty:
 else:
     st.error("❌ No VIX data retrieved from Alpaca!")
 
+
+###################################################################################
 # 🔹 **Fetch Options Data**
 @st.cache_data
 def fetch_options_data(expiration_dates):
@@ -123,6 +128,8 @@ significant_options = significant_options.groupby("strike")["open_interest"].sum
 significant_options = significant_options.sort_values("open_interest", ascending=False).head(5)
 top_strikes = significant_options["strike"].tolist()
 
+
+#######################################################################################33
 # 🔹 **SPY & VIX Chart**
 st.subheader("📉 SPY Price & VIX Over Time")
 fig, ax1 = plt.subplots(figsize=(12, 6))
@@ -143,6 +150,9 @@ ax1.legend(loc="upper left")
 ax2.legend(loc="upper right")
 st.pyplot(fig)
 
+
+
+########################################################################################
 # Function to Fetch Options Data from Tradier
 @st.cache_data
 def fetch_options_data(expiration_dates):
@@ -162,13 +172,15 @@ def fetch_options_data(expiration_dates):
 
     return pd.concat(all_options) if all_options else pd.DataFrame()
 
+
+####################################################################################
 # Fetch Options Data
 options_df = fetch_options_data(selected_expirations)
 
 if not options_df.empty:
-    st.success(f"✅ Retrieved {len(options_df)} SPY option contracts!")
+ #   st.success(f"✅ Retrieved {len(options_df)} SPY option contracts!")
 else:
-    st.error("❌ No options data found for the selected expirations.")
+#    st.error("❌ No options data found for the selected expirations.")
 
 # Filter Option Strikes Near SPY Price (±5%)
 filtered_options = options_df[
@@ -182,6 +194,9 @@ pareto_df = filtered_options.groupby(["expiration", "strike"])["open_interest"].
 pareto_df = pareto_df.sort_values("open_interest", ascending=False).head(5)
 significant_strikes = pareto_df["strike"].tolist()
 
+
+
+######################################################################3
 # 📊 **SPY Price Chart with Option Strikes**
 st.subheader("📉 SPY Price Chart with Significant Option Strikes")
 fig, ax = plt.subplots(figsize=(12, 6))
@@ -212,6 +227,10 @@ st.pyplot(fig)
 # Streamlit Table: Show Top 5 Strikes
 st.subheader("📋 Top 5 Significant Option Strikes")
 st.dataframe(pareto_df)
+
+##############################################################################
+
+
 
 
 # 🧠 **AI Trade Plan**
