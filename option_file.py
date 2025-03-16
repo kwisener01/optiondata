@@ -127,14 +127,36 @@ put_call_ratio_df = options_df.groupby("expiration").apply(
 put_call_ratio_df.columns = ["Expiration", "Put/Call Ratio"]
 put_call_ratio_df = put_call_ratio_df.sort_values("Expiration")
 
-st.subheader("📉 Put/Call Ratio Over Time")
-fig, ax = plt.subplots(figsize=(10, 5))
-ax.plot(put_call_ratio_df["Expiration"], put_call_ratio_df["Put/Call Ratio"], marker="o", linestyle="-", color="purple")
-ax.set_title("Put/Call Ratio for Upcoming Expirations")
-ax.set_xlabel("Expiration Date")
+# 📈 **Put/Call Ratio Line Chart**
+st.subheader("📉 Put/Call Ratio Over Time (Next Month Expiration)")
+
+fig, ax = plt.subplots(figsize=(12, 6))
+ax.plot(put_call_df["Date"], put_call_df["Put/Call Ratio"], marker='o', linestyle='-', color='purple', label="Put/Call Ratio")
+
+ax.axhline(y=1.5, color='red', linestyle='--', alpha=0.5, label="Bearish Threshold (1.5)")
+ax.axhline(y=0.7, color='green', linestyle='--', alpha=0.5, label="Bullish Threshold (0.7)")
+ax.axhline(y=2.5, color='darkred', linestyle='--', alpha=0.5, label="Extreme Bearish (2.5)")
+
+ax.set_title("Put/Call Ratio for Selected Expiration")
 ax.set_ylabel("Put/Call Ratio")
+ax.set_xlabel("Date")
 ax.grid(True)
+ax.legend()
 st.pyplot(fig)
+
+# 📊 **Put/Call Ratio Interpretation Table**
+st.subheader("📊 Put/Call Ratio Sentiment Guide")
+pc_table = pd.DataFrame({
+    "Put/Call Ratio": ["> 2.5", "> 1.5", "0.7 - 1.5", "< 0.7"],
+    "Market Sentiment": [
+        "📉 Extreme Bearish (Potential for Reversal)",
+        "⚠️ Bearish Sentiment (Downside Risk)",
+        "🟡 Neutral / Mixed Sentiment",
+        "🟢 Bullish Sentiment (Upside Potential)"
+    ]
+})
+st.table(pc_table)
+
 
 # 🔹 **SPY Price Chart with Significant Option Strikes**
 st.subheader("📉 SPY Price Chart with Significant Option Strikes")
