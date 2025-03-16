@@ -150,7 +150,14 @@ if st.button("🧠 Generate Trade Plan"):
                 model="gpt-4",
                 messages=[
                     {"role": "system", "content": "You are a professional trading strategist."},
-                    {"role": "user", "content": f"Given the SPY price data and significant option strikes for the following expiration dates: {selected_expirations}, generate a simple trading plan that is easy to follow."}
+                    {"role": "user", "content": f"""
+                    SPY is trading at {latest_spy_price}.
+                    Significant option strikes based on open interest:
+                    {', '.join(map(str, significant_strikes))}.
+                    Expiration dates selected: {', '.join(selected_expirations)}.
+                    
+                    Generate a trading plan that considers these key option levels. The plan should be simple, actionable, and easy to follow. Include potential entry and exit points based on these strikes.
+                    """}
                 ]
             )
             trade_plan = response.choices[0].message.content
