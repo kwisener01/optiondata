@@ -144,38 +144,38 @@ ax2.legend(loc="upper right")
 st.pyplot(fig)
 
 # Function to Fetch Options Data from Tradier
-#@st.cache_data
-#def fetch_options_data(expiration_dates):
-#    all_options = []
-#    for exp_date in expiration_dates:
-#        options_params = {"symbol": "SPY", "expiration": exp_date}
-#        headers = {"Authorization": f"Bearer {TRADIER_API_KEY}", "Accept": "application/json"}
+@st.cache_data
+def fetch_options_data(expiration_dates):
+    all_options = []
+    for exp_date in expiration_dates:
+        options_params = {"symbol": "SPY", "expiration": exp_date}
+        headers = {"Authorization": f"Bearer {TRADIER_API_KEY}", "Accept": "application/json"}
 
-#        response = requests.get(TRADIER_URL_OPTIONS, headers=headers, params=options_params)
+        response = requests.get(TRADIER_URL_OPTIONS, headers=headers, params=options_params)
 
- #       if response.status_code == 200:
- #           options_data = response.json()
- #           if "options" in options_data and "option" in options_data["options"]:
- #               df = pd.DataFrame(options_data["options"]["option"])
- #               df["expiration"] = exp_date  # Add expiration date as a column
- #               all_options.append(df)
+        if response.status_code == 200:
+            options_data = response.json()
+            if "options" in options_data and "option" in options_data["options"]:
+                df = pd.DataFrame(options_data["options"]["option"])
+                df["expiration"] = exp_date  # Add expiration date as a column
+                all_options.append(df)
 
- #   return pd.concat(all_options) if all_options else pd.DataFrame()
+    return pd.concat(all_options) if all_options else pd.DataFrame()
 
 # Fetch Options Data
-#options_df = fetch_options_data(selected_expirations)
+options_df = fetch_options_data(selected_expirations)
 
-#if not options_df.empty:
-#    st.success(f"✅ Retrieved {len(options_df)} SPY option contracts!")
-#else:
-#    st.error("❌ No options data found for the selected expirations.")
+if not options_df.empty:
+    st.success(f"✅ Retrieved {len(options_df)} SPY option contracts!")
+else:
+    st.error("❌ No options data found for the selected expirations.")
 
 # Filter Option Strikes Near SPY Price (±5%)
-#filtered_options = options_df[
-#    ((options_df["strike"] >= latest_spy_price * 0.95) & (options_df["strike"] <= latest_spy_price * 1.05)) & 
-#   ((options_df["open_interest"] > options_df["open_interest"].quantile(0.80)) |
-#     (options_df["volume"] > options_df["volume"].quantile(0.80)))
-#]
+filtered_options = options_df[
+    ((options_df["strike"] >= latest_spy_price * 0.95) & (options_df["strike"] <= latest_spy_price * 1.05)) & 
+   ((options_df["open_interest"] > options_df["open_interest"].quantile(0.80)) |
+     (options_df["volume"] > options_df["volume"].quantile(0.80)))
+]
 
 # Generate Pareto Chart for Significant Strikes
 pareto_df = filtered_options.groupby(["expiration", "strike"])["open_interest"].sum().reset_index()
