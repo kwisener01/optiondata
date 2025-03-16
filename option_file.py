@@ -114,9 +114,16 @@ if not options_df.empty:
 else:
     st.error("❌ No options data found for the selected expirations.")
 
+# 🔹 **Filter Top 5 Significant Option Strikes**
+significant_options = options_df[["strike", "open_interest"]].dropna()
+significant_options = significant_options.groupby("strike")["open_interest"].sum().reset_index()
+significant_options = significant_options.sort_values("open_interest", ascending=False).head(5)
+top_strikes = significant_options["strike"].tolist()
+
 # 🔹 **Put/Call Ratio Line Chart**
-put_call_ratio_df = options_df.groupby("expiration").apply(lambda x: x[x["option_type"] == "put"]["volume"].sum() /
-                                                           x[x["option_type"] == "call"]["volume"].sum() if x[x["option_type"] == "call"]["volume"].sum() > 0 else 0).reset_index()
+put_call_ratio_df = options_df.groupby("expiration").apply(
+    lambda x: x[x["option_type"] == "put"]["volume"].sum() / x[x["option_type"] == "call"]["volume"].sum() if x[x["option_type"] == "call"]["volume"].sum() > 0 else 0
+).reset_index()
 put_call_ratio_df.columns = ["Expiration", "Put/Call Ratio"]
 put_call_ratio_df = put_call_ratio_df.sort_values("Expiration")
 
@@ -129,24 +136,31 @@ ax.set_ylabel("Put/Call Ratio")
 ax.grid(True)
 st.pyplot(fig)
 
-# 🔹 **SPY & VIX Chart**
-st.subheader("📉 SPY Price & VIX Over Time")
-fig, ax1 = plt.subplots(figsize=(12, 6))
+# 🔹 **SPY Price Chart with Significant Option Strikes**
+st.subheader("📉 SPY Price Chart with Significant Option Strikes")
+fig, ax = plt.subplots(figsize=(12, 6))
+ax.plot(spy_df.index, spy_df["c"], label="SPY 5-Min Close Price", color="black", linewidth=1)
 
-ax1.plot(spy_df.index, spy_df["c"], label="SPY 5-Min Close Price", color="black", linewidth=1)
-ax1.set_ylabel("SPY Price", color="black")
-ax1.set_xlabel("Date & Time (ET)")
-ax1.tick_params(axis='y', labelcolor="black")
+# Overlay Top 5 Option Strikes
+for strike in top_strikes:
+    ax.axhline(y=strike, linestyle="--", color="red", alpha=0.7, label=f"Strike {strike}")
 
-if not vix_df.empty:
-    ax2 = ax1.twinx()
-    ax2.plot(vix_df.index, vix_df["c"], label="VIX 5-Min Close Price", color="blue", linestyle="dashed")
-    ax2.set_ylabel("VIX Price", color="blue")
-    ax2.tick_params(axis='y', labelcolor="blue")
+ax.set_title("SPY Price Over Selected Period with Significant Option Strikes")
+ax.set_ylabel("Price")
+ax.set_xlabel("Date & Time (ET)")
+ax.tick_params(axis='x', rotation=45)
+ax.grid(True)
+ax.legend()
+st.pyplot(fig)
 
-ax1.set_title("SPY & VIX Over Selected Period")
-ax1.legend(loc="upper left")
-ax2.legend(loc="upper right")
+# 🔹 **Pareto Chart: Top 5 Option Strikes**
+st.subheader("📊 Pareto Chart: Top 5 Option Strikes by Open Interest")
+fig, ax = plt.subplots(figsize=(10, 5))
+ax.bar(significant_options["strike"].astype(str), significant_options["open_interest"], color="blue", alpha=0.7)
+ax.set_title("Top 5 Option Strikes by Open Interest")
+ax.set_xlabel("Strike Price")
+ax.set_ylabel("Open Interest")
+ax.grid(axis="y")
 st.pyplot(fig)
 
 # 🧠 **AI Trade Plan**
@@ -156,7 +170,7 @@ if st.button("🧠 Generate AI Trade Plan"):
             response = openai_client.chat.completions.create(
                 model="gpt-4",
                 messages=[{"role": "system", "content": "You are a professional trading strategist."},
-                          {"role": "user", "content": f"Given SPY price {latest_spy_price}, VIX trend, put/call ratio over time, and option strikes, generate a simple trading plan."}]
+                          {"role": "user", "content": f"Given SPY price {latest_spy_price}, VIX trend, put/call ratio, and option strikes {top_strikes}, generate a simple trading plan."}]
             )
             st.subheader("📋 AI-Generated Trade Plan")
             st.write(response.choices[0].message.content)
