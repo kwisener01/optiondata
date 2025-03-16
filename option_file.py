@@ -143,30 +143,76 @@ ax1.legend(loc="upper left")
 ax2.legend(loc="upper right")
 st.pyplot(fig)
 
-# 🔹 **SPY Price Chart with Significant Option Strikes**
-st.subheader("📉 SPY Price with Significant Option Strikes")
+# Function to Fetch Options Data from Tradier
+@st.cache_data
+def fetch_options_data(expiration_dates):
+    all_options = []
+    for exp_date in expiration_dates:
+        options_params = {"symbol": "SPY", "expiration": exp_date}
+        headers = {"Authorization": f"Bearer {TRADIER_API_KEY}", "Accept": "application/json"}
+
+        response = requests.get(TRADIER_URL_OPTIONS, headers=headers, params=options_params)
+
+        if response.status_code == 200:
+            options_data = response.json()
+            if "options" in options_data and "option" in options_data["options"]:
+                df = pd.DataFrame(options_data["options"]["option"])
+                df["expiration"] = exp_date  # Add expiration date as a column
+                all_options.append(df)
+
+    return pd.concat(all_options) if all_options else pd.DataFrame()
+
+# Fetch Options Data
+options_df = fetch_options_data(selected_expirations)
+
+if not options_df.empty:
+    st.success(f"✅ Retrieved {len(options_df)} SPY option contracts!")
+else:
+    st.error("❌ No options data found for the selected expirations.")
+
+# Filter Option Strikes Near SPY Price (±5%)
+filtered_options = options_df[
+    ((options_df["strike"] >= latest_spy_price * 0.95) & (options_df["strike"] <= latest_spy_price * 1.05)) & 
+    ((options_df["open_interest"] > options_df["open_interest"].quantile(0.80)) |
+     (options_df["volume"] > options_df["volume"].quantile(0.80)))
+]
+
+# Generate Pareto Chart for Significant Strikes
+pareto_df = filtered_options.groupby(["expiration", "strike"])["open_interest"].sum().reset_index()
+pareto_df = pareto_df.sort_values("open_interest", ascending=False).head(5)
+significant_strikes = pareto_df["strike"].tolist()
+
+# 📊 **SPY Price Chart with Option Strikes**
+st.subheader("📉 SPY Price Chart with Significant Option Strikes")
 fig, ax = plt.subplots(figsize=(12, 6))
 ax.plot(spy_df.index, spy_df["c"], label="SPY 5-Min Close Price", color="black", linewidth=1)
 
-for strike in top_strikes:
+# Overlay Option Strikes as Horizontal Lines
+for i, strike in enumerate(significant_strikes):
     ax.axhline(y=strike, linestyle="--", color="red", alpha=0.7, label=f"Strike {strike}")
 
-ax.set_title("SPY Price with Top 5 Significant Option Strikes")
+ax.set_title("SPY Price Over Selected Period with Significant Option Strikes")
 ax.set_ylabel("Price")
 ax.set_xlabel("Date & Time (ET)")
+ax.tick_params(axis='x', rotation=45)
 ax.grid(True)
 ax.legend()
 st.pyplot(fig)
 
-# 🔹 **Pareto Chart for Significant Strikes**
+# 📊 **Pareto Chart**
 st.subheader("📊 Pareto Chart: Top 5 Option Strikes by Open Interest")
 fig, ax = plt.subplots(figsize=(10, 5))
-ax.bar(significant_options["strike"].astype(str), significant_options["open_interest"], color="blue", alpha=0.7)
+ax.bar(pareto_df["strike"].astype(str), pareto_df["open_interest"], color="blue", alpha=0.7)
 ax.set_title("Top 5 Option Strikes by Open Interest")
 ax.set_xlabel("Strike Price")
 ax.set_ylabel("Open Interest")
 ax.grid(axis="y")
 st.pyplot(fig)
+
+# Streamlit Table: Show Top 5 Strikes
+st.subheader("📋 Top 5 Significant Option Strikes")
+st.dataframe(pareto_df)
+
 
 # 🧠 **AI Trade Plan**
 if st.button("🧠 Generate AI Trade Plan"):
