@@ -12,7 +12,7 @@ ALPACA_SECRET_KEY = st.secrets["ALPACA"]["SECRET_KEY"]
 TRADIER_API_KEY = st.secrets["TRADIER"]["API_KEY"]
 OPENAI_API_KEY = st.secrets["OPENAI"]["API_KEY"]
 
-openai.api_key = OPENAI_API_KEY  # Set OpenAI API Key
+openai_client = openai.OpenAI(api_key=OPENAI_API_KEY)  # Initialize OpenAI client
 
 # 🔹 API Endpoints
 ALPACA_URL = "https://data.alpaca.markets/v2/stocks/SPY/bars"
@@ -123,15 +123,15 @@ st.dataframe(pareto_df)
 if st.button("🧠 Generate Trade Plan"):
     with st.spinner("Generating trade plan..."):
         try:
-            # OpenAI GPT Call
-            completion = openai.ChatCompletion.create(
+            # OpenAI GPT Call (New API format)
+            response = openai_client.chat.completions.create(
                 model="gpt-4",
                 messages=[
                     {"role": "system", "content": "You are a professional trading strategist."},
                     {"role": "user", "content": f"Given the SPY price data and significant option strikes: {significant_strikes}, generate a simple trading plan that is easy to follow."}
                 ]
             )
-            trade_plan = completion["choices"][0]["message"]["content"]
+            trade_plan = response.choices[0].message.content
             st.success("✅ Trade Plan Generated!")
             st.subheader("📋 AI-Generated Trade Plan")
             st.write(trade_plan)
