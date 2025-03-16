@@ -121,7 +121,7 @@ significant_options = options_df[
     (options_df["volume"] > options_df["volume"].quantile(0.80))
 ]
 
-# 🔹 **Calculate Put/Call Ratio by Strike**
+# 🔹 **Calculate Put/Call Ratio by Strike (Only Strikes > 0)**
 if not significant_options.empty:
     calls = significant_options[significant_options["option_type"] == "call"]
     puts = significant_options[significant_options["option_type"] == "put"]
@@ -131,6 +131,7 @@ if not significant_options.empty:
 
     put_call_df = pd.DataFrame({"Call OI": call_oi, "Put OI": put_oi}).fillna(0)
     put_call_df["Put/Call Ratio"] = put_call_df["Put OI"] / put_call_df["Call OI"]
+    put_call_df = put_call_df[put_call_df["Put/Call Ratio"] > 0]  # Filter out zeros
     put_call_df = put_call_df.sort_index()
 
     st.subheader("📊 Put/Call Ratio by Strike Price")
@@ -147,6 +148,21 @@ if not significant_options.empty:
     st.pyplot(fig)
 else:
     st.warning("⚠️ No significant option data available.")
+
+# 🔹 **SPY Price Chart with Significant Option Strikes**
+st.subheader("📉 SPY Price with Significant Option Strikes")
+fig, ax = plt.subplots(figsize=(12, 6))
+ax.plot(spy_df.index, spy_df["c"], label="SPY 5-Min Close Price", color="black", linewidth=1)
+
+for strike in put_call_df.index:
+    ax.axhline(y=strike, linestyle="--", color="red", alpha=0.7, label=f"Strike {strike}")
+
+ax.set_title("SPY Price with Significant Option Strikes")
+ax.set_ylabel("Price")
+ax.set_xlabel("Date & Time (ET)")
+ax.grid(True)
+ax.legend()
+st.pyplot(fig)
 
 # 🔹 **AI-Generated Trade Plan**
 if st.button("🧠 Generate AI Trade Plan"):
