@@ -106,7 +106,10 @@ st.pyplot(fig)
 
 # Generate AI Trade Plan
 if st.button("Generate AI Trade Plan"):
-    prompt = f"SPY price is {latest_spy_price}, market sentiment is {sentiment_df.iloc[-1]['Sentiment Score']}.
+prompt = f"""
+SPY price is {latest_spy_price}, market sentiment is {sentiment_df.iloc[-1]['Sentiment Score']}.
+Using the sentiment data and option open interest levels, suggest a trade plan that is easy to follow.
+"""
     Based on significant options and sentiment, generate an easy-to-follow trade plan."
     response = openai.ChatCompletion.create(
         model="gpt-4",
