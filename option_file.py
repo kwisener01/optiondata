@@ -110,7 +110,7 @@ else:
 
 # Filter Option Strikes Near SPY Price (±5%)
 filtered_options = options_df[
-    ((options_df["strike"] >= latest_spy_price * 0.95) & (options_df["strike"] <= latest_spy_price * 1.05)) &
+    ((options_df["strike"] >= latest_spy_price * 0.95) & (options_df["strike"] <= latest_spy_price * 1.05)) & 
     ((options_df["open_interest"] > options_df["open_interest"].quantile(0.80)) |
      (options_df["volume"] > options_df["volume"].quantile(0.80)))
 ]
@@ -120,7 +120,7 @@ pareto_df = filtered_options.groupby(["expiration", "strike"])["open_interest"].
 pareto_df = pareto_df.sort_values("open_interest", ascending=False).head(5)
 significant_strikes = pareto_df["strike"].tolist()
 
-# Streamlit Plot: Historical SPY Price with Option Strike Levels
+# 📊 **SPY Price Chart with Option Strikes**
 st.subheader("📉 SPY Price Chart with Significant Option Strikes")
 fig, ax = plt.subplots(figsize=(12, 6))
 ax.plot(spy_df.index, spy_df["c"], label="SPY 5-Min Close Price", color="black", linewidth=1)
@@ -137,11 +137,21 @@ ax.grid(True)
 ax.legend()
 st.pyplot(fig)
 
+# 📊 **Pareto Chart**
+st.subheader("📊 Pareto Chart: Top 5 Option Strikes by Open Interest")
+fig, ax = plt.subplots(figsize=(10, 5))
+ax.bar(pareto_df["strike"].astype(str), pareto_df["open_interest"], color="blue", alpha=0.7)
+ax.set_title("Top 5 Option Strikes by Open Interest")
+ax.set_xlabel("Strike Price")
+ax.set_ylabel("Open Interest")
+ax.grid(axis="y")
+st.pyplot(fig)
+
 # Streamlit Table: Show Top 5 Strikes
-st.subheader("📊 Top 5 Significant Option Strikes")
+st.subheader("📋 Top 5 Significant Option Strikes")
 st.dataframe(pareto_df)
 
-# Trade Plan Generation Button
+# 🧠 **Trade Plan Generation Button**
 if st.button("🧠 Generate Trade Plan"):
     with st.spinner("Generating trade plan..."):
         try:
@@ -150,14 +160,7 @@ if st.button("🧠 Generate Trade Plan"):
                 model="gpt-4",
                 messages=[
                     {"role": "system", "content": "You are a professional trading strategist."},
-                    {"role": "user", "content": f"""
-                    SPY is trading at {latest_spy_price}.
-                    Significant option strikes based on open interest:
-                    {', '.join(map(str, significant_strikes))}.
-                    Expiration dates selected: {', '.join(selected_expirations)}.
-                    
-                    Generate a trading plan that considers these key option levels. The plan should be simple, actionable, and easy to follow. Include potential entry and exit points based on these strikes.
-                    """}
+                    {"role": "user", "content": f"Given the SPY price data and significant option strikes {significant_strikes} for {selected_expirations}, generate a simple trading plan that is easy to follow."}
                 ]
             )
             trade_plan = response.choices[0].message.content
