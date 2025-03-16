@@ -116,8 +116,11 @@ put_call_ratio = yf.download("^PCCE", start=start_date, end=end_date, interval="
 
 sentiment_score = (1 / put_call_ratio) * 100 - vix_data
 
+# 🔹 Calculate Market Sentiment Score
+sentiment_score = (1 / put_call_ratio) * 100 - vix_data
+latest_sentiment = float(sentiment_score.iloc[-1])  # Ensure it's a numerical value
+
 # 🔹 Display Market Sentiment Bar
-latest_sentiment = sentiment_score.iloc[-1]
 if latest_sentiment > 60:
     sentiment_color = "🟢 Bullish"
 elif 40 <= latest_sentiment <= 60:
