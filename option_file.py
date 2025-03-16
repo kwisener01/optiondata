@@ -115,16 +115,19 @@ if not options_df.empty:
 else:
     st.error("❌ No options data found for the selected expirations.")
 
-# 🔹 **Filter Significant Option Strikes**
+# 🔹 **Filter Significant Option Strikes (Top 5)**
 significant_options = options_df[
     (options_df["open_interest"] > options_df["open_interest"].quantile(0.80)) |
     (options_df["volume"] > options_df["volume"].quantile(0.80))
 ]
+significant_options = significant_options.groupby("strike")["open_interest"].sum().reset_index()
+significant_options = significant_options.sort_values("open_interest", ascending=False).head(5)
+top_strikes = significant_options["strike"].tolist()
 
-# 🔹 **Calculate Put/Call Ratio by Strike (Only Strikes > 0)**
-if not significant_options.empty:
-    calls = significant_options[significant_options["option_type"] == "call"]
-    puts = significant_options[significant_options["option_type"] == "put"]
+# 🔹 **Calculate Put/Call Ratio by Strike**
+if not options_df.empty:
+    calls = options_df[options_df["option_type"] == "call"]
+    puts = options_df[options_df["option_type"] == "put"]
 
     call_oi = calls.groupby("strike")["open_interest"].sum()
     put_oi = puts.groupby("strike")["open_interest"].sum()
@@ -132,15 +135,15 @@ if not significant_options.empty:
     put_call_df = pd.DataFrame({"Call OI": call_oi, "Put OI": put_oi}).fillna(0)
     put_call_df["Put/Call Ratio"] = put_call_df["Put OI"] / put_call_df["Call OI"]
     put_call_df = put_call_df[put_call_df["Put/Call Ratio"] > 0]  # Filter out zeros
-    put_call_df = put_call_df.sort_index()
+    put_call_df = put_call_df.sort_values("Put/Call Ratio", ascending=False).head(5)  # Get top 5
 
-    st.subheader("📊 Put/Call Ratio by Strike Price")
+    st.subheader("📊 Put/Call Ratio (Top 5 Strikes)")
     st.dataframe(put_call_df)
 
     fig, ax = plt.subplots(figsize=(12, 6))
-    ax.plot(put_call_df.index, put_call_df["Put/Call Ratio"], marker="o", linestyle="-", color="black")
+    ax.bar(put_call_df.index.astype(str), put_call_df["Put/Call Ratio"], color="black")
     ax.axhline(y=1, color="red", linestyle="--", label="Neutral Level (1.0)")
-    ax.set_title("Put/Call Ratio by Strike Price")
+    ax.set_title("Put/Call Ratio (Top 5 Strikes)")
     ax.set_ylabel("Put/Call Ratio")
     ax.set_xlabel("Strike Price")
     ax.grid(True)
@@ -154,10 +157,10 @@ st.subheader("📉 SPY Price with Significant Option Strikes")
 fig, ax = plt.subplots(figsize=(12, 6))
 ax.plot(spy_df.index, spy_df["c"], label="SPY 5-Min Close Price", color="black", linewidth=1)
 
-for strike in put_call_df.index:
+for strike in top_strikes:
     ax.axhline(y=strike, linestyle="--", color="red", alpha=0.7, label=f"Strike {strike}")
 
-ax.set_title("SPY Price with Significant Option Strikes")
+ax.set_title("SPY Price with Top 5 Significant Option Strikes")
 ax.set_ylabel("Price")
 ax.set_xlabel("Date & Time (ET)")
 ax.grid(True)
@@ -170,14 +173,10 @@ if st.button("🧠 Generate AI Trade Plan"):
         try:
             response = openai_client.chat.completions.create(
                 model="gpt-4",
-                messages=[
-                    {"role": "system", "content": "You are a professional trading strategist."},
-                    {"role": "user", "content": f"Given SPY's price and significant option strikes, with Put/Call ratios: {put_call_df.to_dict()}, generate a simple trading plan that is easy to follow."}
-                ]
+                messages=[{"role": "system", "content": "You are a professional trading strategist."},
+                          {"role": "user", "content": f"Given SPY price and significant option strikes: {top_strikes} with Put/Call ratios: {put_call_df.to_dict()}, generate a simple trading plan."}]
             )
-            trade_plan = response.choices[0].message.content
-            st.success("✅ Trade Plan Generated!")
             st.subheader("📋 AI-Generated Trade Plan")
-            st.write(trade_plan)
+            st.write(response.choices[0].message.content)
         except Exception as e:
             st.error(f"⚠️ Error generating trade plan: {str(e)}")
