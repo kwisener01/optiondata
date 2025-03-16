@@ -16,6 +16,7 @@ openai_client = openai.OpenAI(api_key=OPENAI_API_KEY)  # Initialize OpenAI clien
 
 # 🔹 API Endpoints
 ALPACA_URL = "https://data.alpaca.markets/v2/stocks/SPY/bars"
+TRADIER_URL_EXPIRATIONS = "https://api.tradier.com/v1/markets/options/expirations"
 TRADIER_URL_OPTIONS = "https://api.tradier.com/v1/markets/options/chains"
 
 # 🔹 User Input for Date Range
@@ -25,6 +26,25 @@ end_date = st.sidebar.date_input("End Date", datetime.date(2025, 3, 15))
 
 # Streamlit App Title
 st.title("📈 SPY Price & Significant Option Strikes")
+
+# Function to Fetch Available Expiration Dates
+@st.cache_data
+def fetch_expiration_dates():
+    headers = {"Authorization": f"Bearer {TRADIER_API_KEY}", "Accept": "application/json"}
+    response = requests.get(f"{TRADIER_URL_EXPIRATIONS}?symbol=SPY", headers=headers)
+
+    if response.status_code == 200:
+        data = response.json()
+        return data.get("expirations", {}).get("date", [])
+    else:
+        st.error("⚠️ Error fetching expiration dates!")
+        return []
+
+# Fetch Expiration Dates
+expiration_dates = fetch_expiration_dates()
+
+# Expiration Date Multi-Select Dropdown
+selected_expirations = st.sidebar.multiselect("📆 Select Expiration Dates", expiration_dates, default=[expiration_dates[0]])
 
 # Function to Fetch SPY Data from Alpaca
 @st.cache_data
@@ -61,30 +81,32 @@ if not spy_df.empty:
 else:
     st.error("❌ No SPY data retrieved from Alpaca!")
 
-# Expiration Date Selection
-st.sidebar.subheader("📆 Select Expiration Date")
-selected_expiration = st.sidebar.text_input("Enter Expiration Date (YYYY-MM-DD)", "2025-03-21")
-
-# Fetch Options Data from Tradier
+# Function to Fetch Options Data from Tradier
 @st.cache_data
-def fetch_options_data(expiration_date):
-    options_params = {"symbol": "SPY", "expiration": expiration_date}
-    headers = {"Authorization": f"Bearer {TRADIER_API_KEY}", "Accept": "application/json"}
+def fetch_options_data(expiration_dates):
+    all_options = []
+    for exp_date in expiration_dates:
+        options_params = {"symbol": "SPY", "expiration": exp_date}
+        headers = {"Authorization": f"Bearer {TRADIER_API_KEY}", "Accept": "application/json"}
 
-    response = requests.get(TRADIER_URL_OPTIONS, headers=headers, params=options_params)
+        response = requests.get(TRADIER_URL_OPTIONS, headers=headers, params=options_params)
 
-    if response.status_code == 200:
-        options_data = response.json()
-        if "options" in options_data and "option" in options_data["options"]:
-            return pd.DataFrame(options_data["options"]["option"])
-    return pd.DataFrame()
+        if response.status_code == 200:
+            options_data = response.json()
+            if "options" in options_data and "option" in options_data["options"]:
+                df = pd.DataFrame(options_data["options"]["option"])
+                df["expiration"] = exp_date  # Add expiration date as a column
+                all_options.append(df)
 
-options_df = fetch_options_data(selected_expiration)
+    return pd.concat(all_options) if all_options else pd.DataFrame()
+
+# Fetch Options Data
+options_df = fetch_options_data(selected_expirations)
 
 if not options_df.empty:
     st.success(f"✅ Retrieved {len(options_df)} SPY option contracts!")
 else:
-    st.error("❌ No options data found for this expiration.")
+    st.error("❌ No options data found for the selected expirations.")
 
 # Filter Option Strikes Near SPY Price (±5%)
 filtered_options = options_df[
@@ -94,7 +116,7 @@ filtered_options = options_df[
 ]
 
 # Generate Pareto Chart for Significant Strikes
-pareto_df = filtered_options.groupby("strike")["open_interest"].sum().reset_index()
+pareto_df = filtered_options.groupby(["expiration", "strike"])["open_interest"].sum().reset_index()
 pareto_df = pareto_df.sort_values("open_interest", ascending=False).head(5)
 significant_strikes = pareto_df["strike"].tolist()
 
@@ -128,7 +150,7 @@ if st.button("🧠 Generate Trade Plan"):
                 model="gpt-4",
                 messages=[
                     {"role": "system", "content": "You are a professional trading strategist."},
-                    {"role": "user", "content": f"Given the SPY price data and significant option strikes: {significant_strikes}, generate a simple trading plan that is easy to follow."}
+                    {"role": "user", "content": f"Given the SPY price data and significant option strikes for the following expiration dates: {selected_expirations}, generate a simple trading plan that is easy to follow."}
                 ]
             )
             trade_plan = response.choices[0].message.content
