@@ -120,15 +120,16 @@ sentiment_score = (1 / put_call_ratio) * 100 - vix_data
 sentiment_score = (1 / put_call_ratio) * 100 - vix_data
 latest_sentiment = float(sentiment_score.iloc[-1])  # Ensure it's a numerical value
 
-# 🔹 Display Market Sentiment Bar
-if latest_sentiment > 60:
-    sentiment_color = "🟢 Bullish"
-elif 40 <= latest_sentiment <= 60:
-    sentiment_color = "🟡 Neutral"
+if latest_sentiment is not None:
+    if latest_sentiment > 60:
+        sentiment_color = "🟢 Bullish"
+    elif 40 <= latest_sentiment <= 60:
+        sentiment_color = "🟡 Neutral"
+    else:
+        sentiment_color = "🔴 Bearish"
+    st.sidebar.markdown(f"**Market Sentiment: {sentiment_color} ({latest_sentiment:.2f})**")
 else:
-    sentiment_color = "🔴 Bearish"
-
-st.sidebar.markdown(f"**Market Sentiment: {sentiment_color}**")
+    st.sidebar.warning("⚠️ No sentiment data available.")
 
 # 🔹 Plot Historical SPY Price with Option Strikes & Market Sentiment
 st.subheader("📉 SPY Price Chart with Significant Option Strikes")
