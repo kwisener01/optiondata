@@ -144,7 +144,7 @@ ax2.legend(loc="upper right")
 st.pyplot(fig)
 
 # Function to Fetch Options Data from Tradier
-@st.cache_data
+#@st.cache_data
 #def fetch_options_data(expiration_dates):
 #    all_options = []
 #    for exp_date in expiration_dates:
@@ -171,11 +171,11 @@ st.pyplot(fig)
 #    st.error("❌ No options data found for the selected expirations.")
 
 # Filter Option Strikes Near SPY Price (±5%)
-filtered_options = options_df[
-    ((options_df["strike"] >= latest_spy_price * 0.95) & (options_df["strike"] <= latest_spy_price * 1.05)) & 
-    ((options_df["open_interest"] > options_df["open_interest"].quantile(0.80)) |
-     (options_df["volume"] > options_df["volume"].quantile(0.80)))
-]
+#filtered_options = options_df[
+#    ((options_df["strike"] >= latest_spy_price * 0.95) & (options_df["strike"] <= latest_spy_price * 1.05)) & 
+#   ((options_df["open_interest"] > options_df["open_interest"].quantile(0.80)) |
+#     (options_df["volume"] > options_df["volume"].quantile(0.80)))
+#]
 
 # Generate Pareto Chart for Significant Strikes
 pareto_df = filtered_options.groupby(["expiration", "strike"])["open_interest"].sum().reset_index()
