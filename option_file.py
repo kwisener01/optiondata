@@ -93,35 +93,39 @@ if not options_df.empty:
 else:
     st.error("❌ No options data found for this expiration.")
 
-# **Step 5: Filter Options Near SPY Price & Extract Gamma**
-filtered_options = options_df[
-    ((options_df["strike"] >= latest_spy_price * 0.95) & (options_df["strike"] <= latest_spy_price * 1.05)) &
-    ((options_df["open_interest"] > options_df["open_interest"].quantile(0.80)) |
-     (options_df["volume"] > options_df["volume"].quantile(0.80)))
-]
+# **Step 5: Check for "Gamma" Column & Handle Errors**
+if "gamma" in options_df.columns:
+    filtered_options = options_df[
+        ((options_df["strike"] >= latest_spy_price * 0.95) & (options_df["strike"] <= latest_spy_price * 1.05)) &
+        ((options_df["open_interest"] > options_df["open_interest"].quantile(0.80)) |
+         (options_df["volume"] > options_df["volume"].quantile(0.80)))
+    ]
 
-# Extract Gamma Values
-gamma_df = filtered_options[["strike", "gamma"]].dropna().sort_values("gamma", ascending=False).head(5)
-significant_strikes = gamma_df["strike"].tolist()  # Extract top 5 strike levels
-strike_labels = [f"Strike {s}: Gamma {g:.4f}" for s, g in zip(gamma_df["strike"], gamma_df["gamma"])]
+    # Extract Gamma Values
+    gamma_df = filtered_options[["strike", "gamma"]].dropna().sort_values("gamma", ascending=False).head(5)
+    significant_strikes = gamma_df["strike"].tolist()  # Extract top 5 strike levels
+    strike_labels = [f"Strike {s}: Gamma {g:.4f}" for s, g in zip(gamma_df["strike"], gamma_df["gamma"])]
 
-# **Step 6: Plot SPY Price with Significant Strikes & Gamma**
-st.subheader("📉 SPY Price Chart with Option Strikes & Gamma Levels")
-fig, ax = plt.subplots(figsize=(12, 6))
-ax.plot(spy_df.index, spy_df["c"], label="SPY 5-Min Close Price", color="black", linewidth=1)
+    # **Step 6: Plot SPY Price with Significant Strikes & Gamma**
+    st.subheader("📉 SPY Price Chart with Option Strikes & Gamma Levels")
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.plot(spy_df.index, spy_df["c"], label="SPY 5-Min Close Price", color="black", linewidth=1)
 
-# Overlay Gamma Levels on the Chart
-for i, (strike, label) in enumerate(zip(significant_strikes, strike_labels)):
-    ax.axhline(y=strike, linestyle="--", color="red", alpha=0.7, label=label)
+    # Overlay Gamma Levels on the Chart
+    for i, (strike, label) in enumerate(zip(significant_strikes, strike_labels)):
+        ax.axhline(y=strike, linestyle="--", color="red", alpha=0.7, label=label)
 
-ax.set_title(f"SPY Price ({start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}) with Significant Gamma Levels ({selected_expiration})")
-ax.set_ylabel("Price")
-ax.set_xlabel("Date & Time (ET)")
-ax.tick_params(axis='x', rotation=45)
-ax.grid(True)
-ax.legend()
-st.pyplot(fig)
+    ax.set_title(f"SPY Price ({start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}) with Significant Gamma Levels ({selected_expiration})")
+    ax.set_ylabel("Price")
+    ax.set_xlabel("Date & Time (ET)")
+    ax.tick_params(axis='x', rotation=45)
+    ax.grid(True)
+    ax.legend()
+    st.pyplot(fig)
 
-# **Step 7: Display Top 5 Gamma Strikes**
-st.subheader("📊 Top 5 Option Strikes with Highest Gamma")
-st.dataframe(gamma_df)
+    # **Step 7: Display Top 5 Gamma Strikes**
+    st.subheader("📊 Top 5 Option Strikes with Highest Gamma")
+    st.dataframe(gamma_df)
+
+else:
+    st.warning("⚠️ 'Gamma' data not available in API response. Please check Tradier API permissions or data provider.")
